@@ -1,3 +1,4 @@
+
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials
@@ -9,21 +10,10 @@ from streamlit_folium import st_folium
 from PIL import Image
 import datetime
 import uuid
+from streamlit_geolocation import streamlit_geolocation
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Nature SG", page_icon="🌿", layout="wide")
-
-# --- DATA STRUCTURES (Mock locations for Singapore Parks) ---
-SG_PARKS = {
-    "Singapore Botanic Gardens": [1.3138, 103.8159],
-    "MacRitchie Reservoir": [1.3411, 103.8217],
-    "Bukit Timah Nature Reserve": [1.3486, 103.7770],
-    "East Coast Park": [1.3007, 103.9122],
-    "Sungei Buloh Wetland Reserve": [1.4468, 103.7303],
-    "Pasir Ris Park": [1.3811, 103.9515],
-    "Punggol Waterway Park": [1.4087, 103.9048],
-    "Jurong Lake Gardens": [1.3364, 103.7288]
-}
 
 # --- INITIALIZATION ---
 def init_services():
@@ -66,7 +56,7 @@ init_services()
 def identify_wildlife(image_data):
     """Calls Gemini Vision API to identify the content."""
     try:
-        model = genai.GenerativeModel('gemini-2.5-flash') # Flash is fast and supports vision
+        model = genai.GenerativeModel('gemini-1.5-flash') # Flash is fast and supports vision
         prompt = """
         You are a wildlife expert specializing in the flora and fauna of Singapore.
         Look at this image and identify the primary subject. 
@@ -129,7 +119,14 @@ with tab1:
             img_file_buffer = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
             
         st.subheader("Location")
-        selected_park = st.selectbox("Where are you?", list(SG_PARKS.keys()))
+        loc = streamlit_geolocation()
+        default_lat, default_lon = 1.3521, 103.8198
+        if loc and loc.get('latitude') and loc.get('longitude'):
+            default_lat = loc['latitude']
+            default_lon = loc['longitude']
+            
+        latitude = st.number_input("Latitude", value=float(default_lat), format="%.6f")
+        longitude = st.number_input("Longitude", value=float(default_lon), format="%.6f")
         
     with col2:
         st.subheader("Identification Result")
@@ -156,9 +153,8 @@ with tab1:
                             ref = db.reference('sightings')
                             record = {
                                 "timestamp": datetime.datetime.now().isoformat(),
-                                "park": selected_park,
-                                "latitude": SG_PARKS[selected_park][0],
-                                "longitude": SG_PARKS[selected_park][1],
+                                "latitude": latitude,
+                                "longitude": longitude,
                                 "type": parsed["type"],
                                 "name": parsed["name"],
                                 "description": parsed["description"]
@@ -186,11 +182,11 @@ with tab2:
         if not filtered_df.empty:
             st.markdown(f"Showing **{len(filtered_df)}** recorded sightings.")
             
-            # Count per park
-            park_counts = filtered_df['park'].value_counts().reset_index()
-            park_counts.columns = ['park', 'count']
+            # Count per type
+            type_counts = filtered_df['type'].value_counts().reset_index()
+            type_counts.columns = ['Type', 'Count']
             
-            st.dataframe(park_counts, hide_index=True)
+            st.dataframe(type_counts, hide_index=True)
 
             # Create Folium Map
             # Center on Singapore
@@ -231,7 +227,9 @@ with tab3:
                     icon = "🌿" if row['type'] == 'Plant' else "🐞" if row['type'] == 'Insect' else "🦊"
                     st.markdown(f"### {icon}")
                 with col_b:
-                    st.markdown(f"**{row['name']}** at {row['park']}")
+                    has_park = 'park' in row and pd.notna(row['park'])
+                    location_text = row['park'] if has_park else f"GPS: {row.get('latitude', 0.0):.4f}, {row.get('longitude', 0.0):.4f}"
+                    st.markdown(f"**{row['name']}** at {location_text}")
                     st.caption(f"{row['type']} | {row['timestamp'][:16].replace('T', ' ')}")
                     if 'description' in row and row['description']:
                         st.markdown(f"> {row['description']}")
