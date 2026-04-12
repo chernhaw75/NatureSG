@@ -56,7 +56,7 @@ init_services()
 def identify_wildlife(image_data):
     """Calls Gemini Vision API to identify the content."""
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash') # Flash is fast and supports vision
+        model = genai.GenerativeModel('gemini-2.5-flash') # Flash is fast and supports vision
         prompt = """
         You are a wildlife expert specializing in the flora and fauna of Singapore.
         Look at this image and identify the primary subject. 
