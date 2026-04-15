@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdn.jsdelivr.net/npm/streamlit-component-lib@1.3.0/dist/streamlit.js"></script>
+    <style>
+        body { 
+            margin: 0; 
+            padding: 0; 
+            background: transparent; 
+            font-family: sans-serif; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #camera-container {
+            width: 100%;
+            max-width: 400px; /* fit well within 4.5 inch screen */
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            background: #f7f9fa;
+            border-radius: 8px;
+            padding: 10px;
+            box-sizing: border-box;
+            border: 1px solid #e6e9ef;
+        }
+        video { 
+            width: 100%; 
+            border-radius: 6px; 
+            background: #000;
+        }
+        .controls { 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between;
+            width: 100%;
+        }
+        .controls label {
+            font-size: 14px;
+            color: #31333F;
+            font-weight: 500;
+        }
+        input[type="range"] {
+            flex-grow: 1;
+            margin-left: 10px;
+        }
+        button { 
+            width: 100%;
+            padding: 12px; 
+            font-size: 16px; 
+            font-weight: bold;
+            background-color: #FF4B4B; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            transition: opacity 0.2s;
+        }
+        button:hover {
+            opacity: 0.9;
+        }
+        button:disabled {
+            background-color: #ff9999;
+            cursor: not-allowed;
+        }
+        .preview-container {
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+        }
+        #preview-img {
+            width: 100%;
+            border-radius: 6px;
+        }
+        .btn-secondary {
+            background-color: #31333F;
+        }
+    </style>
+</head>
+<body>
+    <div id="camera-container">
+        <div id="video-section">
+            <video id="video" autoplay playsinline></video>
+            <div class="controls">
+                <label for="zoom">Zoom</label>
+                <input type="range" id="zoom" min="1" max="3" step="0.1" value="1" disabled>
+            </div>
+            <button id="capture-btn">📸 Take Photo</button>
+        </div>
+
+        <div id="preview-section" class="preview-container">
+            <img id="preview-img" alt="Captured preview" />
+            <div style="display: flex; gap: 10px;">
+                <button id="retake-btn" class="btn-secondary">Retake</button>
+                <button id="confirm-btn">Confirm ✅</button>
+            </div>
+        </div>
+        
+        <canvas id="canvas" style="display:none;"></canvas>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureBtn = document.getElementById('capture-btn');
+        const zoomSlider = document.getElementById('zoom');
+        
+        const videoSection = document.getElementById('video-section');
+        const previewSection = document.getElementById('preview-section');
+        const previewImg = document.getElementById('preview-img');
+        const retakeBtn = document.getElementById('retake-btn');
+        const confirmBtn = document.getElementById('confirm-btn');
+
+        let streamTrack = null;
+        let capturedDataUrl = null;
+
+        async function initCamera() {
+            try {
+                // Request environment camera
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { exact: "environment" } }
+                });
+                video.srcObject = stream;
+                setupZoom(stream);
+            } catch (err) {
+                console.warn("Could not access exact environment camera, falling back to default.", err);
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                    video.srcObject = stream;
+                    setupZoom(stream);
+                } catch (fallbackErr) {
+                    console.error("No camera accessible:", fallbackErr);
+                    captureBtn.disabled = true;
+                    captureBtn.innerText = "Camera Access Denied";
+                }
+            }
+            // Give video a moment to size properly, then report size
+            video.onloadedmetadata = () => {
+                setTimeout(() => Streamlit.setFrameHeight(), 100);
+            };
+        }
+
+        function setupZoom(stream) {
+            const [track] = stream.getVideoTracks();
+            streamTrack = track;
+            const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+            
+            if ('zoom' in capabilities) {
+                zoomSlider.min = capabilities.zoom.min;
+                zoomSlider.max = capabilities.zoom.max;
+                zoomSlider.step = capabilities.zoom.step;
+                zoomSlider.value = track.getSettings().zoom || 1;
+                zoomSlider.disabled = false;
+                
+                zoomSlider.oninput = async (event) => {
+                    try {
+                        await track.applyConstraints({
+                            advanced: [{ zoom: event.target.value }]
+                        });
+                    } catch (err) {
+                        console.error("Zoom error:", err);
+                    }
+                };
+            }
+        }
+
+        captureBtn.addEventListener('click', () => {
+            if (!video.videoWidth) return;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            capturedDataUrl = canvas.toDataURL('image/jpeg');
+            
+            // Show preview
+            previewImg.src = capturedDataUrl;
+            videoSection.style.display = 'none';
+            previewSection.style.display = 'flex';
+            setTimeout(() => Streamlit.setFrameHeight(), 100);
+        });
+
+        retakeBtn.addEventListener('click', () => {
+            capturedDataUrl = null;
+            previewSection.style.display = 'none';
+            videoSection.style.display = 'block';
+            
+            // Re-send height and notify Streamlit value is cleared
+            setTimeout(() => Streamlit.setFrameHeight(), 100);
+            Streamlit.setComponentValue(null);
+        });
+
+        confirmBtn.addEventListener('click', () => {
+             // Send to Streamlit
+             Streamlit.setComponentValue(capturedDataUrl);
+             confirmBtn.innerText = "Sent! ✓";
+             setTimeout(() => { confirmBtn.innerText = "Confirm ✅"; }, 2000);
+        });
+
+        // Initialize and notify Streamlit we're ready
+        Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, (event) => {
+            Streamlit.setFrameHeight();
+        });
+        Streamlit.setComponentReady();
+        initCamera();
+    </script>
+</body>
+</html>
