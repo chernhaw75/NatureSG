@@ -10,10 +10,15 @@ from streamlit_folium import st_folium
 from PIL import Image
 import datetime
 import uuid
+import base64
+import io
+import streamlit.components.v1 as components
 from streamlit_geolocation import streamlit_geolocation
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Nature SG", page_icon="🌿", layout="wide")
+st.set_page_config(page_title="Nature SG", page_icon="🌿", layout="centered")
+
+custom_camera = components.declare_component("custom_camera", path="camera_component")
 
 # --- INITIALIZATION ---
 def init_services():
@@ -56,7 +61,7 @@ init_services()
 def identify_wildlife(image_data):
     """Calls Gemini Vision API to identify the content."""
     try:
-        model = genai.GenerativeModel('gemini-2.5-flash') # Flash is fast and supports vision
+        model = genai.GenerativeModel('gemini-1.5-flash') # Flash is fast and supports vision
         prompt = """
         You are a wildlife expert specializing in the flora and fauna of Singapore.
         Look at this image and identify the primary subject. 
@@ -105,16 +110,15 @@ tab1, tab2, tab3 = st.tabs(["📸 Identify & Log", "🗺️ Sightings Map", "�
 
 # --- TAB 1: IDENTIFY & LOG ---
 with tab1:
-    col1, col2 = st.columns([1, 1])
-    
-    with col1:
+    with st.container():
         st.subheader("Capture Image")
         # Let user choose camera or file upload
         input_method = st.radio("Select input method:", ["Camera", "Upload File"], horizontal=True)
         img_file_buffer = None
+        custom_cam_data = None
         
         if input_method == "Camera":
-            img_file_buffer = st.camera_input("Take a picture")
+            custom_cam_data = custom_camera(key="rear_camera")
         else:
             img_file_buffer = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
             
@@ -128,11 +132,22 @@ with tab1:
         latitude = st.number_input("Latitude", value=float(default_lat), format="%.6f")
         longitude = st.number_input("Longitude", value=float(default_lon), format="%.6f")
         
-    with col2:
+    with st.container():
         st.subheader("Identification Result")
-        if img_file_buffer is not None:
-            # Display image
+        img = None
+        
+        if custom_cam_data:
+            try:
+                base64_data = custom_cam_data.split(',')[1]
+                image_data = base64.b64decode(base64_data)
+                img = Image.open(io.BytesIO(image_data))
+            except Exception as e:
+                st.error("Error decoding camera image.")
+        elif img_file_buffer is not None:
             img = Image.open(img_file_buffer)
+            
+        if img is not None:
+            # Display image
             st.image(img, use_container_width=True, caption="Your Image")
             
             if st.button("Identify Wildlife", type="primary"):
