@@ -3,7 +3,6 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <script src="https://cdn.jsdelivr.net/npm/streamlit-component-lib@1.3.0/dist/streamlit.js"></script>
     <style>
         body { 
             margin: 0; 
@@ -102,6 +101,40 @@
     </div>
 
     <script>
+        // Inline Streamlit Component API
+        const Streamlit = {
+            events: {
+                addEventListener: function (type, callback) {
+                    window.addEventListener("message", function (event) {
+                        if (event.data.type === type) {
+                            callback(event);
+                        }
+                    });
+                }
+            },
+            setComponentReady: function () {
+                window.parent.postMessage({
+                    isStreamlitMessage: true,
+                    type: "streamlit:componentReady",
+                    apiVersion: 1,
+                }, "*");
+            },
+            setFrameHeight: function (height) {
+                window.parent.postMessage({
+                    isStreamlitMessage: true,
+                    type: "streamlit:setFrameHeight",
+                    height: height !== undefined ? height : document.body.scrollHeight,
+                }, "*");
+            },
+            setComponentValue: function (value) {
+                window.parent.postMessage({
+                    isStreamlitMessage: true,
+                    type: "streamlit:setComponentValue",
+                    value: value,
+                }, "*");
+            },
+            RENDER_EVENT: "streamlit:render",
+        };
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const captureBtn = document.getElementById('capture-btn');
