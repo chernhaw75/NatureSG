@@ -12,13 +12,16 @@ import datetime
 import uuid
 import base64
 import io
+import os
 import streamlit.components.v1 as components
 from streamlit_geolocation import streamlit_geolocation
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Nature SG", page_icon="🌿", layout="centered")
 
-custom_camera = components.declare_component("custom_camera", path="camera_component")
+parent_dir = os.path.dirname(os.path.abspath(__file__))
+camera_component_path = os.path.join(parent_dir, "camera_component")
+custom_camera = components.declare_component("custom_camera", path=camera_component_path)
 
 # --- INITIALIZATION ---
 def init_services():
@@ -61,7 +64,7 @@ init_services()
 def identify_wildlife(image_data):
     """Calls Gemini Vision API to identify the content."""
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash') # Flash is fast and supports vision
+        model = genai.GenerativeModel('gemini-2.5-flash') # Flash is fast and supports vision
         prompt = """
         You are a wildlife expert specializing in the flora and fauna of Singapore.
         Look at this image and identify the primary subject. 
